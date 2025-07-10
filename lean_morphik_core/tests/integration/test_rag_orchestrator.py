@@ -74,10 +74,12 @@ async def test_ingest_file_successful(orchestrator: RAGOrchestrator, mock_parser
     # Ensure mock_parser.split_text returns a chunk with specific content for this test if needed for other assertions
     # For this specific test, the default "Chunk 1" is fine.
 
-    with patch("builtins.open", mock_open(read_data=b"file content")):
+    # Correctly capture and use the mock for builtins.open
+    mock_builtin_open_instance = mock_open(read_data=b"file content")
+    with patch("builtins.open", mock_builtin_open_instance):
         await orchestrator.ingest_file(file_path, file_name, document_id, pinecone_namespace)
 
-    mocked_file_open.assert_called_once_with(file_path, "rb")
+    mock_builtin_open_instance.assert_called_once_with(file_path, "rb")
     mock_parser.parse_file_to_text.assert_awaited_once_with(b"file content", file_name)
     mock_parser.split_text.assert_awaited_once_with("Parsed text content")
     mock_embedding_model.embed_for_ingestion.assert_awaited_once_with([Chunk(content="Chunk 1", metadata={})])
@@ -131,7 +133,7 @@ async def test_ingest_file_io_error(orchestrator: RAGOrchestrator, mock_parser):
     mock_parser.parse_file_to_text.assert_not_awaited()
 
 @pytest.mark.asyncio
-@patch("litellm.acompletion") # Corrected patch path
+@patch("lean_morphik_core.app.orchestrator.rag_orchestrator.litellm.acompletion")
 async def test_query_successful(mock_litellm_acompletion, orchestrator: RAGOrchestrator, mock_embedding_model, mock_pinecone_store):
     query_text = "Tell me about apples"
     mock_llm_response = MagicMock()
@@ -155,7 +157,7 @@ async def test_query_successful(mock_litellm_acompletion, orchestrator: RAGOrche
     assert result["retrieved_pinecone_matches"][0]["metadata"]["original_content"] == "Retrieved chunk 1 content"
 
 @pytest.mark.asyncio
-@patch("litellm.acompletion") # Corrected patch path
+@patch("lean_morphik_core.app.orchestrator.rag_orchestrator.litellm.acompletion")
 async def test_query_no_pinecone_results(mock_litellm_acompletion, orchestrator: RAGOrchestrator, mock_pinecone_store):
     mock_pinecone_store.query_vectors.return_value = []
     mock_llm_response = MagicMock()
@@ -169,10 +171,11 @@ async def test_query_no_pinecone_results(mock_litellm_acompletion, orchestrator:
     assert result["answer"] == "I don't have enough information."
 
 @pytest.mark.asyncio
-@patch("litellm.acompletion") # Corrected patch path
+@patch("lean_morphik_core.app.orchestrator.rag_orchestrator.litellm.acompletion")
 async def test_query_llm_error(mock_litellm_acompletion, orchestrator: RAGOrchestrator):
     mock_litellm_acompletion.side_effect = Exception("LLM API error")
     result = await orchestrator.query("test query")
+    mock_litellm_acompletion.assert_awaited_once() # Ensure it was actually called
     assert result["answer"] == "There was an error generating the answer."
 
 @pytest.mark.asyncio
@@ -201,7 +204,7 @@ async def test_ingest_file_pinecone_metadata_stores_original_chunk_content(orche
     assert upserted_vector_metadata["original_content"] == specific_chunk_content
 
 @pytest.mark.asyncio
-@patch("litellm.acompletion") # Corrected patch path
+@patch("lean_morphik_core.app.orchestrator.rag_orchestrator.litellm.acompletion")
 async def test_query_retrieves_text_from_pinecone_metadata_if_present(mock_litellm_acompletion, orchestrator: RAGOrchestrator, mock_pinecone_store):
     mock_pinecone_store.query_vectors.return_value = [
         {"id": "match1", "score": 0.9, "metadata": {"original_content": "Original content text 1"}}, # Changed from text_preview

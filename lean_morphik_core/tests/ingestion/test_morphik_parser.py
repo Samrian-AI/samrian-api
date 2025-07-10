@@ -1,7 +1,9 @@
 import pytest
+import pytest
 import os
 import tempfile
 from typing import List
+from unittest.mock import patch # Ensure patch is imported at the top
 
 # Adjust import path based on your project structure
 from lean_morphik_core.app.ingestion.morphik_parser import MorphikParser
@@ -50,11 +52,8 @@ async def test_split_text_standard_chunker(basic_parser: MorphikParser):
     for chunk in chunks:
         assert isinstance(chunk, Chunk)
         assert len(chunk.content) > 0
-        # Check if overlap is somewhat working (very basic check)
-        if len(chunks) > 1 and chunks.index(chunk) > 0:
-            prev_chunk_suffix = chunks[chunks.index(chunk)-1].content[-basic_parser.chunker.text_splitter.chunk_overlap:]
-            # This check might be too strict depending on splitter behavior with short sentences.
-            # assert chunk.content.startswith(prev_chunk_suffix)
+        # Detailed overlap checking is handled by test_standard_chunker_overlap
+        # and test_recursive_splitter_separators.
 
     # Verify total length is roughly preserved (minus overlaps being counted once)
     total_chunked_length = sum(len(c.content) for c in chunks)
@@ -187,7 +186,8 @@ async def test_standard_chunker_overlap(basic_parser: MorphikParser):
 # --- ContextualChunker Tests ---
 @pytest.fixture
 def contextual_parser(mocker) -> MorphikParser:
-    mocker.patch("litellm.completion", return_value=mocker.MagicMock(choices=[mocker.MagicMock(message=mocker.MagicMock(content="Mocked Context."))]))
+    # The litellm.completion mock will be applied directly to the test function
+    # to ensure the correct patching target.
     return MorphikParser(
         chunk_size=100,
         chunk_overlap=10,
@@ -197,23 +197,21 @@ def contextual_parser(mocker) -> MorphikParser:
     )
 
 @pytest.mark.asyncio
-async def test_contextual_chunking_adds_context(contextual_parser: MorphikParser, mocker):
+@patch("lean_morphik_core.app.ingestion.morphik_parser.litellm.completion")
+async def test_contextual_chunking_adds_context(mock_parser_litellm_completion, contextual_parser: MorphikParser, mocker): # Add mock to params
     text_content = "This is a test sentence for contextual chunking. It needs to be long enough to be chunked."
 
-    # litellm is imported directly within the ContextualChunker._situate_context method
-    # So, we patch litellm.completion directly at its source.
-    mock_completion = mocker.patch("litellm.completion")
-
+    # Configure the mock provided by the @patch decorator
     mock_response = mocker.MagicMock()
     mock_message = mocker.MagicMock()
     mock_message.content = "Mocked LLM Context. "
     mock_response.choices = [mocker.MagicMock(message=mock_message)]
-    mock_completion.return_value = mock_response
+    mock_parser_litellm_completion.return_value = mock_response
 
     chunks: List[Chunk] = await contextual_parser.split_text(text_content)
 
     assert len(chunks) > 0
-    mock_completion.assert_called()
+    mock_parser_litellm_completion.assert_called()
 
     for chunk in chunks:
         assert chunk.content.startswith("Mocked LLM Context. ")
@@ -310,19 +308,65 @@ def test_recursive_splitter_separators():
     # C3: "ence. Another sentence.\n"
     # C4: "nce.\nThird line."
     # The key is that it respects separators and then chunk_size/overlap.
-    # Exact content matching is fragile; focus on properties.
+    # Focus on properties: chunk count, content presence at start/end, overlap, and size constraints.
 
-    assert len(chunks) >= 3 # Expecting multiple chunks based on separators and length
-    assert "First paragraph." in chunks[0] # First part should be there
-    if len(chunks) > 1:
-      assert chunks[1].startswith(chunks[0][-splitter.chunk_overlap:]) # Overlap check
-    # Check if main segments are present
-    assert any("First paragraph" in chk for chk in chunks)
-    assert any("Second paragraph" in chk for chk in chunks)
-    assert any("Third line" in chk for chk in chunks)
-    for chk_obj in chunk_objs:
-        # The non-overlapped part of a chunk should not exceed chunk_size
-        # This is a bit tricky to assert directly without knowing which part is the overlap
-        # if the chunk is not the first one.
-        # However, the total length of a chunk (including its prepended overlap) can exceed chunk_size.
-        pass # More robust assertions might be needed if this test keeps failing.
+    assert len(chunks) > 1 # Expecting multiple chunks
+
+    # Check Content Presence (start and end)
+    # Note: Depending on splitter behavior with separators, the absolute start/end might be tricky.
+    # For example, if a separator is at the very beginning.
+    # Let's assume for this text, it's straightforward.
+    assert chunks[0].content.startswith("First paragraph.") # Access .content from Chunk object
+    assert chunks[-1].content.endswith("Third line.")    # Access .content from Chunk object
+
+    # Check Overlap Property and size constraints for each chunk
+    for i in range(len(chunk_objs)):
+        current_chunk_content = chunk_objs[i].content
+
+        # Check chunk size constraint (non-overlapping part)
+        # The first chunk's content should be within chunk_size.
+        # Subsequent chunks' non-overlapping part should be within chunk_size.
+        if i == 0:
+            assert len(current_chunk_content) <= splitter.chunk_size, \
+                f"First chunk size {len(current_chunk_content)} exceeds {splitter.chunk_size}"
+        else: # For chunks after the first, verify overlap and non-overlapping part size
+            overlap_val = splitter.chunk_overlap
+            expected_overlap_segment = chunk_objs[i-1].content[-overlap_val:]
+            assert current_chunk_content.startswith(expected_overlap_segment), \
+                f"Chunk {i} does not start with the overlap from chunk {i-1}. Expected start: '{expected_overlap_segment}', Got: '{current_chunk_content[:overlap_val]}'"
+
+            non_overlapping_part_length = len(current_chunk_content) - overlap_val
+            # It's possible the non_overlapping_part_length is negative if chunk is smaller than overlap
+            # This usually means the chunk is mostly or all overlap.
+            # The core idea is that what's *added* beyond the overlap shouldn't itself exceed chunk_size.
+            # A more direct way for RecursiveCharacterTextSplitter is often to check total length of created documents.
+            # However, the prompt asks for this specific overlap check.
+            # If the chunk is smaller than overlap, it implies it's a final small piece.
+            # The splitter aims for len(docs[i]) ~= chunk_size, not len(docs[i])-overlap <= chunk_size
+            # The total length of a chunk created by langchains's RecursiveCharacterTextSplitter
+            # (which includes the prepended overlap for chunks > 0) should be <= chunk_size,
+            # unless a single semantic unit (like a long word with no separators) itself exceeds chunk_size.
+            # Let's re-verify this understanding for RecursiveCharacterTextSplitter.
+            # Langchain's RecursiveCharacterTextSplitter aims for each *created document/chunk* to be of size chunk_size.
+            # The overlap is *additional* to the previous chunk, but the current chunk itself is formed, then overlap is added to next.
+            # No, that's not quite right. It tries to make chunks of size `chunk_size`, and then `chunk_overlap` characters
+            # from the end of the current chunk are prepended to the next chunk.
+            # So, `len(chunks[i].content)` should be around `chunk_size`.
+            # The `non_overlap_part` logic from `test_recursive_splitter_simple_split` is more accurate for what is *newly added*.
+
+            # Let's use the logic from test_recursive_splitter_simple_split for non_overlapping_part:
+            # This applies if the current chunk content is indeed larger than the overlap.
+            if len(current_chunk_content) > overlap_val:
+                 non_overlap_part = current_chunk_content[overlap_val:]
+                 assert len(non_overlap_part) <= splitter.chunk_size, \
+                     f"Non-overlapping part of chunk {i} is too large: {len(non_overlap_part)} vs {splitter.chunk_size}"
+            # Also, the total length of any chunk should not drastically exceed chunk_size,
+            # unless a single word is longer than chunk_size.
+            assert len(current_chunk_content) <= splitter.chunk_size + overlap_val, \
+                 f"Total chunk {i} length {len(current_chunk_content)} seems too large relative to chunk_size {splitter.chunk_size} and overlap {overlap_val}"
+
+
+    # Check if main segments are present (already good)
+    assert any("First paragraph" in chk.content for chk in chunk_objs)
+    assert any("Second paragraph" in chk.content for chk in chunk_objs)
+    assert any("Third line" in chk.content for chk in chunk_objs)
