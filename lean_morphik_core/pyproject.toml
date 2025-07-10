@@ -7,7 +7,7 @@ name = "lean_morphik_core"
 version = "0.1.0"
 description = "Surgically extracted and refactored Morphik modules for ingestion, embedding, and RAG orchestration."
 readme = "README.md"
-requires-python = ">=3.9, <=3.12" # Allow Python 3.12.x, updated to meet numpy requirements
+requires-python = ">=3.9, <3.13" # Allow Python 3.12.x, updated to meet numpy requirements
 license = {text = "MIT"}
 authors = [
   {name = "AI Agent Jules", email = "jules@example.com"},
@@ -26,7 +26,7 @@ classifiers = [
 ]
 dependencies = [
     "filetype~=1.2.0",
-    "unstructured[local-inference]~=0.12.6", # unstructured <0.13.0 for onnxruntime<1.16 compat with py311
+    "unstructured[local-inference]>=0.13.0,<0.15.0", # Attempting update for Py3.12 compatibility
     "Pillow~=10.2.0", # Downgraded to be compatible with unstructured~=0.12.6
     "opencv-python-headless~=4.9.0",
     "assemblyai~=0.20.0",

@@ -25,6 +25,7 @@ def basic_parser() -> MorphikParser:
         # No API keys needed for basic text parsing without contextual chunking or video
     )
 
+@pytest.mark.unit
 @pytest.mark.asyncio
 async def test_parse_simple_text_file(basic_parser: MorphikParser):
     content = "This is a simple sentence. This is another sentence. And a third one."
@@ -40,6 +41,7 @@ async def test_parse_simple_text_file(basic_parser: MorphikParser):
     finally:
         os.remove(dummy_file_path)
 
+@pytest.mark.unit
 @pytest.mark.asyncio
 async def test_split_text_standard_chunker(basic_parser: MorphikParser):
     text_content = "This is the first sentence. This is the second sentence, which is a bit longer. The third sentence is short. A fourth one to make sure. And a fifth for good measure."
@@ -62,6 +64,7 @@ async def test_split_text_standard_chunker(basic_parser: MorphikParser):
     assert total_chunked_length <= len(text_content) + (len(chunks) * basic_parser.chunker.text_splitter.chunk_overlap)
 
 
+@pytest.mark.unit
 @pytest.mark.asyncio
 async def test_parse_pdf_file_mocked_unstructured(basic_parser: MorphikParser, mocker):
     # Mock the 'partition' call from unstructured
@@ -89,6 +92,7 @@ async def test_parse_pdf_file_mocked_unstructured(basic_parser: MorphikParser, m
     finally:
         os.remove(dummy_pdf_path)
 
+@pytest.mark.unit
 @pytest.mark.asyncio
 async def test_parse_docx_file_mocked_unstructured(basic_parser: MorphikParser, mocker):
     mock_partition_element = mocker.MagicMock()
@@ -109,6 +113,7 @@ async def test_parse_docx_file_mocked_unstructured(basic_parser: MorphikParser, 
     finally:
         os.remove(dummy_docx_path)
 
+@pytest.mark.unit
 @pytest.mark.asyncio
 async def test_parse_json_file_mocked_unstructured(basic_parser: MorphikParser, mocker):
     mock_partition_element = mocker.MagicMock()
@@ -130,6 +135,7 @@ async def test_parse_json_file_mocked_unstructured(basic_parser: MorphikParser, 
     finally:
         os.remove(dummy_json_path)
 
+@pytest.mark.unit
 @pytest.mark.asyncio
 async def test_parse_markdown_file_mocked_unstructured(basic_parser: MorphikParser, mocker):
     mock_partition_element = mocker.MagicMock()
@@ -151,6 +157,7 @@ async def test_parse_markdown_file_mocked_unstructured(basic_parser: MorphikPars
         os.remove(dummy_md_path)
 
 
+@pytest.mark.unit
 @pytest.mark.asyncio
 async def test_empty_text_chunking(basic_parser: MorphikParser):
     chunks = await basic_parser.split_text("")
@@ -161,6 +168,7 @@ async def test_empty_text_chunking(basic_parser: MorphikParser):
         assert len(chunks) == 0
 
 
+@pytest.mark.unit
 @pytest.mark.asyncio
 async def test_text_shorter_than_chunk_size(basic_parser: MorphikParser):
     text = "Short text."
@@ -168,6 +176,7 @@ async def test_text_shorter_than_chunk_size(basic_parser: MorphikParser):
     assert len(chunks) == 1
     assert chunks[0].content == text
 
+@pytest.mark.unit
 @pytest.mark.asyncio
 async def test_standard_chunker_overlap(basic_parser: MorphikParser):
     text = "This is a sentence that is definitely longer than one hundred characters to ensure that it will be split into multiple chunks for testing the overlap. This is the second part of the text, also made long enough."
@@ -196,6 +205,7 @@ def contextual_parser(mocker) -> MorphikParser:
         contextual_chunking_llm_api_key="test_key"
     )
 
+@pytest.mark.unit
 @pytest.mark.asyncio
 @patch("lean_morphik_core.app.ingestion.morphik_parser.litellm.completion")
 async def test_contextual_chunking_adds_context(mock_parser_litellm_completion, contextual_parser: MorphikParser, mocker): # Add mock to params
@@ -219,6 +229,7 @@ async def test_contextual_chunking_adds_context(mock_parser_litellm_completion, 
         assert original_part in text_content
 
 # --- VideoParser Mocked Tests ---
+@pytest.mark.unit
 @pytest.mark.asyncio
 async def test_parse_video_file_mocked(mocker):
     mocker.patch("lean_morphik_core.app.ingestion.morphik_parser.filetype.guess", return_value=mocker.MagicMock(mime="video/mp4"))
@@ -260,6 +271,7 @@ async def test_parse_video_file_mocked(mocker):
     assert metadata["video_metadata"] == {"duration": 10}
 
 # --- RecursiveCharacterTextSplitter Direct Tests ---
+@pytest.mark.unit
 def test_recursive_splitter_simple_split():
     test_splitter_config = MorphikParser(chunk_size=20, chunk_overlap=5).chunker.text_splitter
     text = "Sentence one. Sentence two. Sentence three."
@@ -295,6 +307,7 @@ def test_recursive_splitter_simple_split():
     assert chunks_content_short[0] == short_text
 
 
+@pytest.mark.unit
 def test_recursive_splitter_separators():
     splitter = MorphikParser(chunk_size=30, chunk_overlap=5).chunker.text_splitter
     text = "First paragraph.\n\nSecond paragraph with a sentence. Another sentence.\nThird line."

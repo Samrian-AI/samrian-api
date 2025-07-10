@@ -63,6 +63,7 @@ def embedding_model(mock_automodel_and_processor):
 
     return model
 
+@pytest.mark.unit
 def test_colpali_initialization_cpu(mock_automodel_and_processor):
     mock_model, mock_processor = mock_automodel_and_processor
     with patch("torch.backends.mps.is_available", return_value=False), \
@@ -74,6 +75,7 @@ def test_colpali_initialization_cpu(mock_automodel_and_processor):
     mock_processor.from_pretrained.assert_called_once_with("test/processor", trust_remote_code=True)
     assert model.batch_size == 1 # Default
 
+@pytest.mark.unit
 @pytest.mark.parametrize("cuda_available, mps_available, expected_device_str", [
     (True, False, "cuda"),
     (False, True, "mps"),
@@ -97,6 +99,7 @@ def test_colpali_initialization_device_auto_select(mock_automodel_and_processor,
     )
 
 
+@pytest.mark.unit
 @pytest.mark.asyncio
 async def test_generate_embeddings_text(embedding_model: ColpaliEmbeddingModel):
     text = "This is a test sentence."
@@ -107,6 +110,7 @@ async def test_generate_embeddings_text(embedding_model: ColpaliEmbeddingModel):
     embedding_model.processor.assert_called_with(text=text, return_tensors="pt", padding=True, truncation=True)
     # embedding_model.model.assert_called_once() # Model is called via __call__
 
+@pytest.mark.unit
 @pytest.mark.asyncio
 async def test_generate_embeddings_image(embedding_model: ColpaliEmbeddingModel, mocker):
     # Create a dummy image using PIL
@@ -125,6 +129,7 @@ async def test_generate_embeddings_image(embedding_model: ColpaliEmbeddingModel,
     embedding_model.processor.assert_called_with(images=dummy_pil_image, return_tensors="pt")
     # embedding_model.model.assert_called_once()
 
+@pytest.mark.unit
 @pytest.mark.asyncio
 async def test_embed_for_query(embedding_model: ColpaliEmbeddingModel):
     query_text = "Test query"
@@ -135,6 +140,7 @@ async def test_embed_for_query(embedding_model: ColpaliEmbeddingModel):
     # generate_embeddings is called internally, so its mocks will be checked
 
 # --- Test embed_for_ingestion ---
+@pytest.mark.unit
 @pytest.mark.asyncio
 async def test_embed_for_ingestion_single_text_chunk(embedding_model: ColpaliEmbeddingModel):
     chunk = Chunk(content="Text content", metadata={"is_image": False})
@@ -144,6 +150,7 @@ async def test_embed_for_ingestion_single_text_chunk(embedding_model: ColpaliEmb
     assert isinstance(embeddings[0], np.ndarray)
     assert embeddings[0].shape == (MOCK_EMBEDDING_DIM,)
 
+@pytest.mark.unit
 @pytest.mark.asyncio
 async def test_embed_for_ingestion_multiple_text_chunks(embedding_model: ColpaliEmbeddingModel):
     chunks = [
@@ -171,6 +178,7 @@ async def test_embed_for_ingestion_multiple_text_chunks(embedding_model: Colpali
     assert embeddings[0].shape == (MOCK_EMBEDDING_DIM,)
     assert isinstance(embeddings[1], np.ndarray)
 
+@pytest.mark.unit
 @pytest.mark.asyncio
 async def test_embed_for_ingestion_single_image_chunk(embedding_model: ColpaliEmbeddingModel, mocker):
     # Base64 encoded tiny red dot GIF
@@ -200,6 +208,7 @@ async def test_embed_for_ingestion_single_image_chunk(embedding_model: ColpaliEm
     assert embeddings[0].shape == (MOCK_EMBEDDING_DIM,)
     # lean_morphik_core.app.embedding.colpali_embedding_model.open_image.assert_called_once() # Fails with mocker
 
+@pytest.mark.unit
 @pytest.mark.asyncio
 async def test_embed_for_ingestion_mixed_chunks_batching(embedding_model: ColpaliEmbeddingModel, mocker):
     # Base64 encoded tiny red dot GIF
@@ -260,21 +269,25 @@ async def test_embed_for_ingestion_mixed_chunks_batching(embedding_model: Colpal
     assert all(isinstance(e, np.ndarray) and e.shape == (MOCK_EMBEDDING_DIM,) for e in embeddings)
     # Further checks could verify that processor and model were called correctly for text and image batches.
 
+@pytest.mark.unit
 @pytest.mark.asyncio
 async def test_embed_for_ingestion_empty_list(embedding_model: ColpaliEmbeddingModel):
     embeddings = await embedding_model.embed_for_ingestion([])
     assert embeddings == []
 
+@pytest.mark.unit
 @pytest.mark.asyncio
 async def test_generate_embeddings_batch_texts_empty(embedding_model: ColpaliEmbeddingModel):
     result = await embedding_model.generate_embeddings_batch_texts([])
     assert result == []
 
+@pytest.mark.unit
 @pytest.mark.asyncio
 async def test_generate_embeddings_batch_images_empty(embedding_model: ColpaliEmbeddingModel):
     result = await embedding_model.generate_embeddings_batch_images([])
     assert result == []
 
+@pytest.mark.unit
 @pytest.mark.asyncio
 async def test_image_processing_failure_fallback_to_text(embedding_model: ColpaliEmbeddingModel, mocker):
     chunk_img_bad = Chunk(content="not_a_base64_string", metadata={"is_image": True})
@@ -300,6 +313,7 @@ async def test_image_processing_failure_fallback_to_text(embedding_model: Colpal
     # The current Colpali model logs error and appends original content to text_items.
     embedding_model.processor.assert_any_call(text=[chunk_img_bad.content], return_tensors="pt", padding=True, truncation=True)
 
+@pytest.mark.unit
 @pytest.mark.asyncio
 async def test_image_processor_pil_failure_in_generate_embeddings(embedding_model: ColpaliEmbeddingModel, mocker):
     dummy_pil_image = PILImageModule.new('RGB', (60, 30), color = 'red')
@@ -325,6 +339,7 @@ async def test_image_processor_pil_failure_in_generate_embeddings(embedding_mode
     assert calls[0][1]['images'] == dummy_pil_image # First call with image
     assert calls[1][1]['text'] == "[image placeholder]"  # Second call with placeholder text
 
+@pytest.mark.unit
 @pytest.mark.asyncio
 async def test_batch_image_processing_failure_returns_zeros(embedding_model: ColpaliEmbeddingModel):
     dummy_pil_image1 = PILImageModule.new('RGB', (10, 10), color='blue')

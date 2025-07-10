@@ -60,6 +60,7 @@ def orchestrator(mock_parser, mock_embedding_model, mock_vector_store, mock_grap
         graph_store=mock_graph_store
     )
 
+@pytest.mark.integration
 @pytest.mark.asyncio
 async def test_ingest_file_successful(orchestrator: RAGOrchestrator, mock_parser, mock_embedding_model, mock_vector_store, mock_graph_store):
     file_path = "dummy/path/to/file.txt"
@@ -112,6 +113,7 @@ async def test_ingest_file_successful(orchestrator: RAGOrchestrator, mock_parser
     assert rel_arg.target_node_properties["id"] == f"{document_id}_chunk_0"
 
 
+@pytest.mark.integration
 @pytest.mark.asyncio
 async def test_ingest_file_no_text_content(orchestrator: RAGOrchestrator, mock_parser): # Removed unused store mocks
     mock_parser.parse_file_to_text.return_value = ({}, "  ") # Simulate empty text extracted
@@ -119,6 +121,7 @@ async def test_ingest_file_no_text_content(orchestrator: RAGOrchestrator, mock_p
         await orchestrator.ingest_file("file.txt", "file.txt", "doc1")
     mock_parser.split_text.assert_not_awaited() # Should not proceed to splitting
 
+@pytest.mark.integration
 @pytest.mark.asyncio
 async def test_ingest_file_no_chunks(orchestrator: RAGOrchestrator, mock_parser, mock_embedding_model): # Removed unused store mocks
     mock_parser.split_text.return_value = [] # Simulate no chunks produced
@@ -126,6 +129,7 @@ async def test_ingest_file_no_chunks(orchestrator: RAGOrchestrator, mock_parser,
         await orchestrator.ingest_file("file.txt", "file.txt", "doc1")
     mock_embedding_model.embed_for_ingestion.assert_not_awaited() # Should not proceed to embedding
 
+@pytest.mark.integration
 @pytest.mark.asyncio
 async def test_ingest_file_io_error(orchestrator: RAGOrchestrator, mock_parser): # Removed unused store mocks
     with patch("builtins.open", mock_open()) as mocked_file:
@@ -134,6 +138,7 @@ async def test_ingest_file_io_error(orchestrator: RAGOrchestrator, mock_parser):
             await orchestrator.ingest_file("nonexistent.txt", "nonexistent.txt", "doc1")
     mock_parser.parse_file_to_text.assert_not_awaited()
 
+@pytest.mark.integration
 @pytest.mark.asyncio
 @patch("lean_morphik_core.app.orchestrator.rag_orchestrator.litellm.acompletion")
 async def test_query_successful(mock_litellm_acompletion, orchestrator: RAGOrchestrator, mock_embedding_model, mock_vector_store):
@@ -168,6 +173,7 @@ async def test_query_successful(mock_litellm_acompletion, orchestrator: RAGOrche
     # Key for retrieved matches also updated
     assert result["retrieved_vector_store_matches"][0]["metadata"]["original_content"] == "Retrieved chunk 1 content"
 
+@pytest.mark.integration
 @pytest.mark.asyncio
 @patch("lean_morphik_core.app.orchestrator.rag_orchestrator.litellm.acompletion")
 async def test_query_no_vector_store_results(mock_litellm_acompletion, orchestrator: RAGOrchestrator, mock_vector_store): # Renamed mock
@@ -185,6 +191,7 @@ async def test_query_no_vector_store_results(mock_litellm_acompletion, orchestra
     assert result["answer"] == "I don't have enough information."
 
 
+@pytest.mark.integration
 @pytest.mark.asyncio
 @patch("lean_morphik_core.app.orchestrator.rag_orchestrator.litellm.acompletion")
 async def test_query_llm_error(mock_litellm_acompletion, orchestrator: RAGOrchestrator): # Removed unused store mocks
@@ -193,6 +200,7 @@ async def test_query_llm_error(mock_litellm_acompletion, orchestrator: RAGOrches
     mock_litellm_acompletion.assert_awaited_once() # Ensure it was actually called
     assert result["answer"] == "There was an error generating the answer."
 
+@pytest.mark.integration
 @pytest.mark.asyncio
 async def test_close_stores(orchestrator: RAGOrchestrator, mock_graph_store, mock_vector_store):
     # Mock vector_store to also have a close method for testing this scenario
@@ -203,6 +211,7 @@ async def test_close_stores(orchestrator: RAGOrchestrator, mock_graph_store, moc
     mock_graph_store.close.assert_awaited_once()
     mock_vector_store.close.assert_awaited_once() # Assert if BaseVectorStore had close()
 
+@pytest.mark.integration
 @pytest.mark.asyncio
 async def test_ingest_file_vector_store_metadata_stores_original_chunk_content(orchestrator: RAGOrchestrator, mock_parser, mock_vector_store): # Renamed
     specific_chunk_content = "This is the specific full chunk content for this test."
@@ -222,6 +231,7 @@ async def test_ingest_file_vector_store_metadata_stores_original_chunk_content(o
     assert "original_content" in upserted_vector.metadata
     assert upserted_vector.metadata["original_content"] == specific_chunk_content
 
+@pytest.mark.integration
 @pytest.mark.asyncio
 @patch("lean_morphik_core.app.orchestrator.rag_orchestrator.litellm.acompletion")
 async def test_query_retrieves_text_from_vector_store_metadata_if_present(mock_litellm_acompletion, orchestrator: RAGOrchestrator, mock_vector_store): # Renamed
