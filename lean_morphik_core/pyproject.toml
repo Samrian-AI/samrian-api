@@ -1,0 +1,63 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lean_morphik_core"
+version = "0.1.0"
+description = "Surgically extracted and refactored Morphik modules for ingestion, embedding, and RAG orchestration."
+readme = "README.md"
+requires-python = ">=3.8, <3.12" # Ensuring Python 3.12 is excluded for onnxruntime compatibility
+license = {text = "MIT"}
+authors = [
+  {name = "AI Agent Jules", email = "jules@example.com"},
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Intended Audience :: Developers",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+dependencies = [
+    "filetype >=1.0.0, <2.0.0",
+    "unstructured[local-inference] >=0.12.0, <0.13.0", # unstructured <0.13.0 for onnxruntime<1.16 compat with py311
+    "Pillow >=9.0.0, <11.0.0",
+    "opencv-python-headless >=4.0.0",
+    "assemblyai >=0.20.0, <0.21.0",
+    "torch >=2.0.0, <3.0.0",
+    "transformers >=4.30.0, <5.0.0",
+    "numpy >=1.20.0, <2.0.0",
+    "sentence-transformers >=2.2.0, <3.0.0",
+    "pinecone-client >=3.0.0, <4.0.0",
+    "neo4j >=5.0.0, <6.0.0",
+    "litellm >=1.15.0, <2.0.0",
+    "tiktoken >=0.5.0, <0.6.0",
+    "aiohttp >=3.8.0, <4.0.0",
+    "python-dotenv >=1.0.0, <2.0.0",
+    # Ensure colpali-engine is NOT listed here
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest >=7.0.0, <8.0.0",
+    "pytest-asyncio >=0.20.0, <0.24.0",
+    "pytest-mock >=3.5.0, <4.0.0",
+]
+dev = [
+    "lean_morphik_core[test]",
+]
+
+[project.urls]
+Homepage = "https://github.com/example/lean_morphik_core"
+Repository = "https://github.com/example/lean_morphik_core"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["app*"]
+exclude = ["tests*"]
