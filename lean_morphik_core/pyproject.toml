@@ -7,7 +7,7 @@ name = "lean_morphik_core"
 version = "0.1.0"
 description = "Surgically extracted and refactored Morphik modules for ingestion, embedding, and RAG orchestration."
 readme = "README.md"
-requires-python = ">=3.8, <3.12" # Ensuring Python 3.12 is excluded for onnxruntime compatibility
+requires-python = ">=3.8, <=3.12" # Allow Python 3.12.x
 license = {text = "MIT"}
 authors = [
   {name = "AI Agent Jules", email = "jules@example.com"},
@@ -40,6 +40,7 @@ dependencies = [
     "tiktoken >=0.5.0, <0.6.0",
     "aiohttp >=3.8.0, <4.0.0",
     "python-dotenv >=1.0.0, <2.0.0",
+    "tenacity >=8.2.0, <9.0.0", # Added tenacity
     # Ensure colpali-engine is NOT listed here
 ]
 

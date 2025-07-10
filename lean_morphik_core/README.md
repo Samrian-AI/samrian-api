@@ -25,12 +25,13 @@ The system is composed of the following key modules located under the `app/` dir
    *   **`ColpaliEmbeddingModel`**: A wrapper around a sentence-transformer compatible model (defaulting to `tsystems/colqwen2.5-3b-multilingual-v1.0`) for generating dense vector embeddings from text chunks. It utilizes the `transformers` library.
 
 ### 3. Storage Adapters (`app/storage/`)
-   *   **`PineconeStore`**: Manages interaction with a Pinecone vector database. It handles the upsertion of document chunk embeddings and querying for relevant chunks based on vector similarity.
-   *   **`Neo4jStore`**: Manages interaction with a Neo4j graph database. It's used to store nodes (e.g., documents, chunks) and relationships between them (e.g., a document `HAS_CHUNK` a chunk). This can be extended to store more complex graph structures like extracted entities and their relationships.
+   *   **`BaseVectorStore` & `BaseGraphStore`**: Abstract base classes defining the interfaces for vector and graph storage operations, respectively.
+   *   **`PineconeStore`**: Implements `BaseVectorStore`. Manages interaction with a Pinecone vector database. It handles the upsertion of document chunk embeddings and querying for relevant chunks based on vector similarity.
+   *   **`Neo4jStore`**: Implements `BaseGraphStore`. Manages interaction with a Neo4j graph database. It's used to store nodes (e.g., documents, chunks) and relationships between them (e.g., a document `HAS_CHUNK` a chunk). This can be extended to store more complex graph structures like extracted entities and their relationships.
 
 ### 4. Orchestration (`app/orchestrator/`)
-   *   **`RAGOrchestrator`**: The central component that ties together parsing, embedding, storage, and retrieval.
-       *   **Ingestion Flow**: Takes a file, uses `MorphikParser` to get text and then chunks, uses `ColpaliEmbeddingModel` to get embeddings, and then stores data in `PineconeStore` and `Neo4jStore`.
+   *   **`RAGOrchestrator`**: The central component that ties together parsing, embedding, storage, and retrieval. It accepts pre-configured instances of the parser, embedding model, vector store (via `BaseVectorStore`), and graph store (via `BaseGraphStore`) through dependency injection.
+       *   **Ingestion Flow**: Takes a file, uses the injected `MorphikParser` to get text and then chunks, uses the `ColpaliEmbeddingModel` to get embeddings, and then stores data using the injected `BaseVectorStore` and `BaseGraphStore` implementations.
        *   **Query Flow (RAG)**: Takes a user query, embeds it, retrieves relevant chunks from `PineconeStore` (and potentially related data from `Neo4jStore` in future extensions), then uses an LLM (via `litellm`) to synthesize an answer based on the retrieved context.
 
 ### 5. Data Models (`app/models/`)
@@ -95,24 +96,56 @@ from app.orchestrator.rag_orchestrator import RAGOrchestrator
 async def main():
     # Ensure your .env file is loaded or environment variables are set
     # For example, using python-dotenv:
-    # from dotenv import load_dotenv
-    # load_dotenv()
-    # pinecone_api_key = os.getenv("PINECONE_API_KEY")
-    # ... etc. for other keys
+    from dotenv import load_dotenv
+    import os
+    load_dotenv() # Load variables from .env file
 
-    orchestrator = RAGOrchestrator(
-        # Provide necessary API keys and configuration if not using defaults
-        # or if they are not picked up from environment variables by underlying classes
-        pinecone_api_key="your_pinecone_key_loaded_somehow",
-        # pinecone_environment="your_env", # if needed
-        pinecone_index_name="my-lean-rag-index",
-        neo4j_uri="bolt://localhost:7687",
-        neo4j_user="neo4j",
-        neo4j_password="password",
-        # parser_assemblyai_api_key="your_assemblyai_key", # if parsing videos
-        # synthesis_llm_api_key="your_llm_provider_key" # for the query LLM
+    # --- Component Initialization ---
+    # Components are configured and instantiated first.
+    # API keys and other configs are typically loaded from environment variables.
+
+    # 1. Initialize Parser
+    from app.ingestion.morphik_parser import MorphikParser
+    parser = MorphikParser(
+        assemblyai_api_key=os.getenv("ASSEMBLYAI_API_KEY") # Optional, only if parsing videos
+        # Add other parser configurations if needed, e.g., for contextual chunking
+        # contextual_chunking_llm_api_key=os.getenv("ANTHROPIC_API_KEY"),
     )
 
+    # 2. Initialize Embedding Model
+    from app.embedding.colpali_embedding_model import ColpaliEmbeddingModel
+    embedding_model = ColpaliEmbeddingModel(
+        # device="cuda" # Or "mps", "cpu", or let it auto-detect
+    )
+
+    # 3. Initialize Vector Store (e.g., Pinecone)
+    from app.storage.pinecone_store import PineconeStore
+    vector_store = PineconeStore(
+        api_key=os.getenv("PINECONE_API_KEY"),
+        index_name=os.getenv("PINECONE_INDEX_NAME", "lean-morphik-index"), # Default index name
+        # environment=os.getenv("PINECONE_ENVIRONMENT"), # For non-serverless
+        # cloud=os.getenv("PINECONE_CLOUD", "aws"),       # For serverless
+        # region=os.getenv("PINECONE_REGION", "us-east-1") # For serverless
+    )
+
+    # 4. Initialize Graph Store (e.g., Neo4j)
+    from app.storage.neo4j_store import Neo4jStore
+    graph_store = Neo4jStore(
+        uri=os.getenv("NEO4J_URI"),
+        user=os.getenv("NEO4J_USER"),
+        password=os.getenv("NEO4J_PASSWORD"),
+        database=os.getenv("NEO4J_DATABASE", "neo4j")
+    )
+
+    # 5. Initialize RAG Orchestrator with injected components
+    orchestrator = RAGOrchestrator(
+        parser=parser,
+        embedding_model=embedding_model,
+        vector_store=vector_store,
+        graph_store=graph_store
+    )
+
+    # --- Using the Orchestrator ---
     # Example: Ingest a file
     # Ensure 'dummy_document.txt' exists or use a valid path
     try:
@@ -156,13 +189,12 @@ if __name__ == "__main__":
     # executable or called via python -m.
     # For simplicity, this example is best run from a separate script.
     # To run this example:
-    # 1. Save the above into a file like `run_example.py` in `lean_morphik_core`.
-    # 2. Ensure your .env file is set up in `lean_morphik_core`.
-    # 3. Run `python run_example.py`.
+    # 1. Ensure you have a .env file in the `lean_morphik_core` directory with your API keys and URIs.
+    # 2. Save the Python code above into a file, e.g., `run_orchestrator_example.py`, inside the `lean_morphik_core` directory.
+    # 3. Run from the terminal (from within the `lean_morphik_core` directory):
+    #    `python run_orchestrator_example.py`
     pass
 ```
-*Note: The example usage code from `rag_orchestrator.py` (the `example_orchestrator_run` function) can also serve as a more detailed example if placed in a runnable script.*
-
 
 ## How to Run Tests
 
